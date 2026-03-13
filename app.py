@@ -66,52 +66,50 @@ if page == "📊 Dashboard":
     st.line_chart(fig.set_index("Month"))
 
 # =============== NEW LOAN (same powerful AI) ===============
-elif page == "📊 Dashboard":
-    # some code here...
+
+
+
 
 elif page == "📋 New Loan":
-    # code...
-
-elif page == "📋 All Loans":   # ← this elif has nothing indented below it
-# no space or code here ← this causes the error
-    st.title("All Loans by Status")
-    loans = pd.read_sql("SELECT l.id, b.name, l.amount, l.status, b.score FROM loans l JOIN borrowers b ON l.borrower_id=b.id", conn)
-    loans["Status"] = loans["status"].apply(lambda x: f'<span class="status-{x}">{x}</span>')
-    st.dataframe(loans, use_container_width=True, column_config={"Status": st.column_config.TextColumn()})
-
-# =============== NEW: PAYMENTS & AMORTIZATION (BraveLender core feature) ===============
-elif page == "💰 Payments & Amortization":
-    st.title("💰 Payments & Amortization")
-    loans = pd.read_sql("SELECT l.id, b.name, l.amount, l.balance, l.rate, l.term FROM loans l JOIN borrowers b ON l.borrower_id=b.id WHERE l.status='Active'", conn)
-    selected = st.selectbox("Select Loan", loans["id"].tolist(), format_func=lambda x: f"Loan #{x} - {loans[loans['id']==x]['name'].values[0]}")
+    st.title("📋 Create New Loan + Advanced AI Scoring")
     
-    row = loans[loans["id"]==selected].iloc[0]
-    st.write(f"**Remaining Balance: ${row['balance']:.2f}**")
+    name = st.text_input("Borrower Name")
+    phone = st.text_input("Phone")
+    age = st.number_input("Age", 18, 70, 30)
+    employment = st.selectbox("Employment Status", ["Employed", "Self-employed", "Unemployed"])
+    income = st.number_input("Monthly Income ($)", min_value=0.0, value=2500.0)
+    prev_loans = st.number_input("Previous Loans", 0, 10, 1)
+    credit_history = st.checkbox("Has Good Credit History", value=True)
+    collateral_value = st.number_input("Collateral Value ($)", min_value=0.0, value=1500.0)
     
-    payment = st.number_input("Payment Amount ($)", min_value=0.0)
-    if st.button("Record Payment"):
-        new_balance = row['balance'] - payment
-        c.execute("UPDATE loans SET balance=? WHERE id=?", (new_balance, selected))
-        c.execute("INSERT INTO payments (loan_id, amount, date) VALUES (?,?,?)", (selected, payment, datetime.today().strftime("%Y-%m-%d")))
+    amount = st.number_input("Loan Amount ($)", min_value=100.0, value=5000.0)
+    rate = st.slider("Interest Rate (%)", 5.0, 36.0, 18.0)
+    term = st.slider("Term (months)", 3, 36, 12)
+
+    if st.button("Create Loan & Run AI Scoring"):
+        score, prob_good, expl, top_factor = calculate_credit_score(income, age, employment, prev_loans, credit_history, collateral_value)
+        risk = "Low" if score > 700 else "Medium" if score > 550 else "High"
+        
+        c.execute("""INSERT INTO borrowers 
+                     (name, phone, age, employment, prev_loans, credit_history_good, collateral_value, score, income, risk) 
+                     VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                  (name, phone, age, employment, prev_loans, 1 if credit_history else 0, collateral_value, score, income, risk))
+        borrower_id = c.lastrowid
+        
+        emi = calculate_emi(amount, rate, term)
+        start_date = datetime.today().strftime("%Y-%m-%d")
+        balance = amount
+        loan_data = (borrower_id, amount, rate, term, "Active", start_date, balance)
+        immutable_hash = create_immutable_hash(loan_data)
+        
+        c.execute("INSERT INTO loans (borrower_id, amount, rate, term, status, start_date, balance, immutable_hash) VALUES (?,?,?,?,?,?,?,?)",
+                  (*loan_data, immutable_hash))
         conn.commit()
-        st.success("✅ Payment recorded! Balance updated.")
-    
-    st.subheader("Amortization Schedule")
-    # Simple table - can expand later
-    st.dataframe(pd.DataFrame({"Month": range(1, row['term']+1), "EMI": [calculate_emi(row['amount'], row['rate'], row['term'])]*row['term']}))
-
-# =============== COLLATERAL & DOCUMENTS (direct BraveLender match) ===============
-elif page == "📁 Collateral & Documents":
-    st.title("📁 Collateral & Document Management")
-    st.write("Upload documents or collateral files (unlimited like BraveLender)")
-    uploaded = st.file_uploader("Upload Collateral Document", type=["pdf","jpg","png","docx"])
-    if uploaded:
-        st.success(f"✅ {uploaded.name} uploaded and stored securely!")
-        # In real version we would save to cloud storage
-
-# =============== REPORTS & AI EXPLORER (kept & improved) ===============
-elif page == "📊 Reports" or page == "🔬 AI Scoring Explorer":
-    # Same as before but with nicer layout
-
-# Footer
-st.sidebar.caption("🚀 HybridLend v2 • Benchmarked on BraveLender • Live on Web")
+        
+        st.success(f"✅ Loan created! AI Credit Score: **{score}** ({risk} Risk)")
+        st.metric("Default Probability", f"{(1-prob_good)*100:.1f}%")
+        st.info(f"Monthly EMI: **${emi}** | Top Factor: **{top_factor}** | Immutable Hash: {immutable_hash[:16]}...")
+        
+        st.subheader("Score Breakdown")
+        chart_data = pd.Series(expl).sort_values(ascending=False)
+        st.bar_chart(chart_data)
