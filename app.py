@@ -86,6 +86,10 @@ elif page == "📋 New Loan":
     rate = st.slider("Interest Rate (%)", 5.0, 36.0, 18.0)
     term = st.slider("Term (months)", 3, 36, 12)
 
+
+
+    
+
     if st.button("Create Loan & Run AI Scoring"):
         score, prob_good, expl, top_factor = calculate_credit_score(income, age, employment, prev_loans, credit_history, collateral_value)
         risk = "Low" if score > 700 else "Medium" if score > 550 else "High"
