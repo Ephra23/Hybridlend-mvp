@@ -66,11 +66,14 @@ if page == "📊 Dashboard":
     st.line_chart(fig.set_index("Month"))
 
 # =============== NEW LOAN (same powerful AI) ===============
-elif page == "📋 New Loan":
-    # [Exact same New Loan form + AI scoring + breakdown as your last version - I kept every field and the Random Forest model]
+elif page == "📊 Dashboard":
+    # some code here...
 
-# =============== ALL LOANS (with status badges - BraveLender style) ===============
-elif page == "📋 All Loans":
+elif page == "📋 New Loan":
+    # code...
+
+elif page == "📋 All Loans":   # ← this elif has nothing indented below it
+# no space or code here ← this causes the error
     st.title("All Loans by Status")
     loans = pd.read_sql("SELECT l.id, b.name, l.amount, l.status, b.score FROM loans l JOIN borrowers b ON l.borrower_id=b.id", conn)
     loans["Status"] = loans["status"].apply(lambda x: f'<span class="status-{x}">{x}</span>')
